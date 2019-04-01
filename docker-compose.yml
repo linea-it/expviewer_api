@@ -6,6 +6,9 @@ services:
     build: .
     working_dir: /app/
     command: python app.py
+    environment:
+      - UPDATE_TIME=1000
+      - LOAD_TIME=0.01
     ports:
       - 5678:5678
     volumes:

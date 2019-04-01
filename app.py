@@ -6,6 +6,7 @@ import time
 from state import State
 import json
 from threading import Thread
+import os
 
 logger = logging.getLogger('__main__')
 handler = logging.StreamHandler()
@@ -24,7 +25,8 @@ class WebSocketHandler(tornado.websocket.WebSocketHandler):
         status = {'status': "connected"}
         self.write_message(json.dumps(status))
         self.lock=False
-        self.loop = tornado.ioloop.PeriodicCallback(self.check_ten_seconds, 4000)
+        self.loop = tornado.ioloop.PeriodicCallback(
+            self.check_ten_seconds, int(os.environ.get('UPDATE_TIME', 1000)))
         self.loop.start()
 
     async def on_message(self, message):

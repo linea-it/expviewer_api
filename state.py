@@ -18,7 +18,7 @@ class State:
         exps = glob.glob('/home/felipe/repos/lsst/notebook/expsNew/*')
         self.exps = []
         for PATH in exps:
-            sleep(0.01)
+            sleep(float(os.environ.get('LOAD_TIME', 0.01)))
             if os.path.isfile(PATH) and os.access(PATH, os.R_OK) and PATH not in self.exps:
                 s.exps.append(PATH.split('expsNew/')[1].split('.')[0])
         self.lock=False
