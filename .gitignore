@@ -3,3 +3,9 @@ __pycache__
 # virtualenv
 .expenv
 .vscode
+.env
+
+# docker compose
+docker-compose.yml
+
+./exposures/
