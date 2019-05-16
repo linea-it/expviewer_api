@@ -45,7 +45,7 @@ class WebSocketHandler(websocket.WebSocketHandler):
             logger.debug('Open request: user {}'.format(self.user_id))
 
             images = list()
-            for img in glob.glob("{}/*.tif".format(IMAGEDIR), recursive=True):
+            for img in glob.glob("{}/**/*.tif".format(IMAGEDIR), recursive=True):
                 images.append(os.path.basename(img))
 
             logger.debug('Old images {}'.format(str(images)))
@@ -160,7 +160,7 @@ def cancel_tasks(cl):
 if __name__ == '__main__':
     try: 
         exp = ImageWatcher(IMAGEDIR) 
-        app.listen(5678)
+        app.listen(int(os.getenv('APP_PORT')))
         ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
         exp.close()
