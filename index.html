@@ -33,7 +33,13 @@
       var json = JSON.parse(ev.data);
       $('#images').hide();
       $('#images').fadeIn("slow");
-      $('#images').append('<p>' + json.filename + '</p>');
+
+      var imgs = json.images;
+
+      for (i = 0; i < imgs.length; i++) { 
+        $('#images').append('<p>' + imgs[i] + '</p>');
+      }
+      
     };
     ws.onclose = function(ev){
       $message.attr("class", 'label label-important');

@@ -9,3 +9,5 @@ __pycache__
 docker-compose.yml
 
 ./exposures/
+
+expviewer.log

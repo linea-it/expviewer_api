@@ -9,8 +9,10 @@ services:
     environment:
       - UPDATE_TIME=1000
       - LOAD_TIME=0.01
+      - IMAGEDIR=/app/exposures
     ports:
       - 5678:5678
     volumes:
       - .:/app
       - ./exposures:/app/exposures
+

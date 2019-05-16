@@ -8,6 +8,7 @@ import os
 import time
 import logging
 from threading import Thread
+import glob
 
 logger = logging.getLogger(__name__)
 handler = logging.FileHandler('expviewer.log')
@@ -17,6 +18,8 @@ formatter = logging.Formatter(
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
+
+IMAGEDIR = os.getenv('IMAGEDIR', '.')
 
 clients = list()
 nuser = int()
@@ -35,15 +38,22 @@ class WebSocketHandler(websocket.WebSocketHandler):
 
     def open(self):
         if self not in clients:
-            logger.info('Open request: user {}'.format(self.user_id))
             global nuser
             nuser = nuser + 1
             self.user_id = nuser
             clients.append(self)
+            logger.debug('Open request: user {}'.format(self.user_id))
+
+            images = list()
+            for img in glob.glob("{}/*.tif".format(IMAGEDIR), recursive=True):
+                images.append(os.path.basename(img))
+
+            logger.debug('Old images {}'.format(str(images)))
+            self.tasks.append(self.write_message({'images': images}))
 
     def on_close(self):
         if self in clients:
-            logger.info('Close request: user {}'.format(self.user_id))
+            logger.debug('Close request: user {}'.format(self.user_id))
             clients.remove(self)
             cancel_tasks(self)
 
@@ -84,13 +94,13 @@ class ImageWatcher:
         """ Starts monitoring. """
         self.__schedule()
         self.__event_observer.start()
-        logger.info('Image watcher started!')
+        logger.debug('Image watcher started!')
 
     def __stop(self):
         """ Breaks monitoring. """
         self.__event_observer.stop()
         self.__event_observer.join()
-        logger.info('Image watcher stoped!')
+        logger.debug('Image watcher stoped!')
 
     def __schedule(self):
         """ Schedules the event handler. """
@@ -106,8 +116,8 @@ class ImageWatcher:
 
 
 class ImageHandler(RegexMatchingEventHandler):
-    # FILE_REGEX = [r".*\.fits$"]
-    FILE_REGEX = [r".png$", r".jpg$"]
+    
+    FILE_REGEX = [r".*.tif$"]
 
     def __init__(self):
         super().__init__(self.FILE_REGEX)
@@ -121,11 +131,11 @@ class ImageHandler(RegexMatchingEventHandler):
             time.sleep(2)
 
         filename = os.path.basename(event.src_path)
-        logger.info("{} image created!".format(filename))
+        logger.debug("{} image created!".format(filename))
 
         for cl in clients:
-            logger.info("-> User {}: send!".format(cl.user_id))
-            task = cl.write_message({'filename': filename})
+            logger.debug("-> User {}: send!".format(cl.user_id))
+            task = cl.write_message({'images': [filename]})
             cl.tasks.append(task)
 
         asyncio.get_event_loop().stop()
@@ -148,8 +158,8 @@ def cancel_tasks(cl):
 
 
 if __name__ == '__main__':
-    try:
-        exp = ImageWatcher('.') 
+    try: 
+        exp = ImageWatcher(IMAGEDIR) 
         app.listen(5678)
         ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
