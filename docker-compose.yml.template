@@ -9,8 +9,11 @@ services:
     environment:
       - UPDATE_TIME=1000
       - LOAD_TIME=0.01
+      - IMAGEDIR=/app/exposures
+      - APP_PORT=5678
     ports:
       - 5678:5678
     volumes:
       - .:/app
-      - /home/felipe/repos/lsst/notebook/expsNew/:/home/felipe/repos/lsst/notebook/expsNew/
+      - ./exposures:/app/exposures
+

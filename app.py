@@ -1,64 +1,167 @@
-import tornado.web
-import tornado.websocket
-import tornado.ioloop
-import logging
-import time
-from state import State
+from tornado import websocket, web, ioloop
+from tornado.platform.asyncio import AnyThreadEventLoopPolicy
+from watchdog.observers import Observer
+from watchdog.events import RegexMatchingEventHandler
+import asyncio
 import json
-from threading import Thread
 import os
+import time
+import logging
+from threading import Thread
+import glob
 
-logger = logging.getLogger('__main__')
-handler = logging.StreamHandler()
+logger = logging.getLogger(__name__)
+handler = logging.FileHandler('expviewer.log')
 formatter = logging.Formatter(
-    '%(asctime)s %(message)s')
+    '%(asctime)s: %(name)s ~ %(levelname)s: %(message)s'
+)
 handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
-s = State()
+IMAGEDIR = os.getenv('IMAGEDIR', '.')
 
-class WebSocketHandler(tornado.websocket.WebSocketHandler):
-    def open(self):
-        logger.info("New client connected")
-        s.count+=1
-        status = {'status': "connected"}
-        self.write_message(json.dumps(status))
-        self.lock=False
-        self.loop = tornado.ioloop.PeriodicCallback(
-            self.check_ten_seconds, int(os.environ.get('UPDATE_TIME', 1000)))
-        self.loop.start()
+clients = list()
+nuser = int()
 
-    async def on_message(self, message):
-        logger.info(message)
-        if message == "getAllImages":
-            self.write_message(self.get_state())
-        elif message == "clearImages":
-            s.exps = []
-        elif message == "findImages":
-            t = Thread(target=s.monitor_files, args=(s,))
-            t.start()
 
-    def on_close(self):
-        logger.info("Client disconnected")
-        s.count-=1
-        self.loop.stop()
+class IndexHandler(web.RequestHandler):
+    def get(self):
+        self.render("index.html")
+
+
+class WebSocketHandler(websocket.WebSocketHandler):
+    tasks = list()
 
     def check_origin(self, origin):
         return True
 
-    def check_ten_seconds(self):
-        # logger.info("Just check")
-        self.write_message(self.get_state())
+    def open(self):
+        if self not in clients:
+            global nuser
+            nuser = nuser + 1
+            self.user_id = nuser
+            clients.append(self)
+            logger.debug('Open request: user {}'.format(self.user_id))
 
-    def get_state(self):
-        return json.dumps({"USERS": s.count, "images": s.exps})
+            images = list()
+            for img in glob.glob("{}/**/*.tif".format(IMAGEDIR), recursive=True):
+                images.append(os.path.basename(img))
 
-application = tornado.web.Application([
-    (r"/", WebSocketHandler),
-], debug=True)
+            logger.debug('Old images {}'.format(str(images)))
+            self.tasks.append(self.write_message({'images': images}))
+
+    def on_close(self):
+        if self in clients:
+            logger.debug('Close request: user {}'.format(self.user_id))
+            clients.remove(self)
+            cancel_tasks(self)
 
 
-if __name__ == "__main__":
-    application.listen(5678)
-    tornado.ioloop.IOLoop.instance().start()
+class ImageWatcher:
+    """ Responsible for managing events in images
+    on a particular path.
+    """
+    
+    def __init__(self, src_path):
+        """ Initializes attributes and start thread for the
+        monitoring
+        
+        Arguments:
+            src_path {str} -- directory path to be monitored
+        """
+        self.__src_path = src_path
+        self.__event_handler = ImageHandler()
+        self.__event_observer = Observer()
+        self.__stop_thread = False
+        self.__process = Thread(target=self.__run)
+        self.__process.start()
+
+    def __run(self):
+        """ Sets the background monitoring. """
+        self.__start()
+        try:
+            while True:  
+                if self.__stop_thread: 
+                    break
+                time.sleep(1)
+        except Exception:
+            logger.exception("Image watcher interrupted")
+        finally:
+            self.__stop()
+
+    def __start(self):
+        """ Starts monitoring. """
+        self.__schedule()
+        self.__event_observer.start()
+        logger.debug('Image watcher started!')
+
+    def __stop(self):
+        """ Breaks monitoring. """
+        self.__event_observer.stop()
+        self.__event_observer.join()
+        logger.debug('Image watcher stoped!')
+
+    def __schedule(self):
+        """ Schedules the event handler. """
+        self.__event_observer.schedule(
+            self.__event_handler,
+            self.__src_path,
+            recursive=True
+        )
+
+    def close(self):
+        """ Sets flag to stop monitoring. """
+        self.__stop_thread = True
+
+
+class ImageHandler(RegexMatchingEventHandler):
+    
+    FILE_REGEX = [r".*.tif$"]
+
+    def __init__(self):
+        super().__init__(self.FILE_REGEX)
+
+    def on_created(self, event):
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        file_size = -1
+
+        while file_size != os.path.getsize(event.src_path):
+            file_size = os.path.getsize(event.src_path)
+            time.sleep(2)
+
+        filename = os.path.basename(event.src_path)
+        logger.debug("{} image created!".format(filename))
+
+        for cl in clients:
+            logger.debug("-> User {}: send!".format(cl.user_id))
+            task = cl.write_message({'images': [filename]})
+            cl.tasks.append(task)
+
+        asyncio.get_event_loop().stop()
+
+app = web.Application([
+    (r'/', IndexHandler),
+    (r'/ws', WebSocketHandler),
+])
+
+
+def cancel_all_tasks():
+    global clients
+    for cl in clients:
+        cancel_tasks(cl)
+
+
+def cancel_tasks(cl):
+    for task in cl.tasks:
+        task.cancel()
+
+
+if __name__ == '__main__':
+    try: 
+        exp = ImageWatcher(IMAGEDIR) 
+        app.listen(int(os.getenv('APP_PORT')))
+        ioloop.IOLoop.instance().start()
+    except KeyboardInterrupt:
+        exp.close()
+        cancel_all_tasks()
