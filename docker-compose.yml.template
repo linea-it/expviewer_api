@@ -5,7 +5,7 @@ services:
     user: 0:0
     build: .
     working_dir: /app/
-    command: python app.py
+    command: sh start.sh
     environment:
       - UPDATE_TIME=1000
       - LOAD_TIME=0.01
