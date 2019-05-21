@@ -28,6 +28,7 @@ def create_img(src, dst):
     shutil.copyfile(src, dst)
     logger.info('runtime: {}'.format(time.time() - start))
 
+
 @asyncio.coroutine
 def simulate_exposure():
     tasks = []
@@ -51,6 +52,7 @@ def rm_tif():
         os.remove(f)
     
     logger.info('Remove EXP {} runtime: {}'.format(ID, time.time() - start))
+
 
 ioloop = asyncio.get_event_loop()
 
