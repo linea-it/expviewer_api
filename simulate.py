@@ -32,7 +32,7 @@ def simulate_exposure():
 
     for img in IMAGES:
         basename = os.path.basename(img)
-        name = "exp-{}-{}".format(str(ID), basename) 
+        name = "exp-{}-{}".format(str(ID).zfill(3), basename) 
         tasks.append(create_img(img, "{}/{}".format(WATCHERDIR, name)))
 
     yield from asyncio.wait(tasks)
@@ -48,7 +48,10 @@ try:
     while True:
         ioloop.run_until_complete(simulate_exposure())
         time.sleep(30)
-        ID = ID + 1
+        if ID <= 100:
+            ID = ID + 1
+        else:
+            ID = 1
         rm_tif()
 except KeyboardInterrupt:
     logger.info('Bye!')
