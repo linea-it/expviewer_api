@@ -19,7 +19,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
-IMAGEDIR = os.getenv('IMAGEDIR', '.')
+WATCHERDIR = os.getenv('WATCHERDIR', '.')
 
 clients = list()
 nuser = int()
@@ -45,7 +45,7 @@ class WebSocketHandler(websocket.WebSocketHandler):
             logger.debug('Open request: user {}'.format(self.user_id))
 
             images = list()
-            for img in glob.glob("{}/**/*.tif".format(IMAGEDIR), recursive=True):
+            for img in glob.glob("{}/**/exp-*.tif".format(WATCHERDIR), recursive=True):
                 images.append(os.path.basename(img))
 
             logger.debug('Old images {}'.format(str(images)))
@@ -117,7 +117,7 @@ class ImageWatcher:
 
 class ImageHandler(RegexMatchingEventHandler):
     
-    FILE_REGEX = [r".*.tif$"]
+    FILE_REGEX = [r".*/exp-.*.tif$"]
 
     def __init__(self):
         super().__init__(self.FILE_REGEX)
@@ -159,7 +159,7 @@ def cancel_tasks(cl):
 
 if __name__ == '__main__':
     try: 
-        exp = ImageWatcher(IMAGEDIR) 
+        exp = ImageWatcher(WATCHERDIR) 
         app.listen(int(os.getenv('APP_PORT')))
         ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
