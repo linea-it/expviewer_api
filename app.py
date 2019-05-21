@@ -128,7 +128,7 @@ class ImageHandler(RegexMatchingEventHandler):
 
         while file_size != os.path.getsize(event.src_path):
             file_size = os.path.getsize(event.src_path)
-            time.sleep(2)
+            asyncio.sleep(1)
 
         filename = os.path.basename(event.src_path)
         logger.debug("{} image created!".format(filename))
