@@ -140,11 +140,6 @@ class ImageHandler(RegexMatchingEventHandler):
 
         asyncio.get_event_loop().stop()
 
-app = web.Application([
-    (r'/', IndexHandler),
-    (r'/ws', WebSocketHandler),
-])
-
 
 def cancel_all_tasks():
     global clients
@@ -157,11 +152,19 @@ def cancel_tasks(cl):
         task.cancel()
 
 
+def main():
+    app = web.Application([
+        (r'/', IndexHandler),
+        (r'/ws', WebSocketHandler),
+    ])
+    app.listen(int(os.getenv('APP_PORT')))
+    ioloop.IOLoop.instance().start()
+
+
 if __name__ == '__main__':
     try: 
         exp = ImageWatcher(WATCHERDIR) 
-        app.listen(int(os.getenv('APP_PORT')))
-        ioloop.IOLoop.instance().start()
+        main()
     except KeyboardInterrupt:
         exp.close()
         cancel_all_tasks()
