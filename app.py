@@ -152,19 +152,17 @@ def cancel_tasks(cl):
         task.cancel()
 
 
-def main():
-    app = web.Application([
-        (r'/api', IndexHandler),
-        (r'/ws', WebSocketHandler),
-    ])
-    app.listen(int(os.getenv('APP_PORT')))
-    ioloop.IOLoop.instance().start()
+app = web.Application([
+    (r'/testing', IndexHandler),
+    (r'/ws', WebSocketHandler),
+])
 
 
 if __name__ == '__main__':
     try: 
         exp = ImageWatcher(WATCHERDIR) 
-        main()
+        app.listen(int(os.getenv('APP_PORT')))
+        ioloop.IOLoop.instance().start()
     except KeyboardInterrupt:
         exp.close()
         cancel_all_tasks()
