@@ -19,7 +19,7 @@ handler.setFormatter(formatter)
 logger.addHandler(handler)
 logger.setLevel(logging.DEBUG)
 
-WATCHERDIR = os.getenv('WATCHERDIR', '.')
+WATCHERDIR = os.getenv('WATCHERDIR')
 
 clients = list()
 nuser = int()
@@ -117,7 +117,7 @@ class ImageWatcher:
 
 class ImageHandler(RegexMatchingEventHandler):
     
-    FILE_REGEX = [r".*/exp-.*.tif$"]
+    FILE_REGEX = [r".*.tif$"]
 
     def __init__(self):
         super().__init__(self.FILE_REGEX)
@@ -154,7 +154,7 @@ def cancel_tasks(cl):
 
 def main():
     app = web.Application([
-        (r'/', IndexHandler),
+        (r'/api', IndexHandler),
         (r'/ws', WebSocketHandler),
     ])
     app.listen(int(os.getenv('APP_PORT')))
