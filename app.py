@@ -1,6 +1,6 @@
 from tornado import websocket, web, ioloop
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
-from watchdog.observers import Observer
+from watchdog.observers.polling import PollingObserver
 from watchdog.events import RegexMatchingEventHandler
 import asyncio
 import json
@@ -72,7 +72,7 @@ class ImageWatcher:
         """
         self.__src_path = src_path
         self.__event_handler = ImageHandler()
-        self.__event_observer = Observer()
+        self.__event_observer = PollingObserver()
         self.__stop_thread = False
         self.__process = Thread(target=self.__run)
         self.__process.start()
