@@ -1,6 +1,5 @@
 #!/bin/bash
 
-#python simulate.py &
 python app.py &
 
 #python app.py
@@ -23,7 +22,8 @@ do
     do
         filename=`basename $i`;
         exp=$(printf %03d $n);
-        cp $i $WATCHERDIR'/exp-'$exp'-'$filename & pids="$pids $!";
+        #cp $i $WATCHERDIR'/exp-'$exp'-'$filename & pids="$pids $!";
+        ln $i $WATCHERDIR'/exp-'$exp'-'$filename & pids="$pids $!";
     done
 
     for pid in $pids; do
@@ -32,16 +32,15 @@ do
 
     echo 'pass wait...'
 
-    #sleep 10;
+    sleep 3;
 
     n=$(( n+1 ))
 
     if [ $n -eq 4 ]
     then
-        sleep 5
     	find $WATCHERDIR -name 'exp-*.tif' -type f -exec rm -fv {} \;
         n=1
     fi
 
-    #sleep 10
+    sleep 3;
 done

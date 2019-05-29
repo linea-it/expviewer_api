@@ -1,14 +1,24 @@
-from tornado import websocket, web, ioloop
+from tornado import websocket, web, ioloop, gen
 from tornado.platform.asyncio import AnyThreadEventLoopPolicy
-from watchdog.observers.polling import PollingObserver
+# from watchdog.observers.polling import PollingObserver as Observer
+from watchdog.observers import Observer as Observer
 from watchdog.events import RegexMatchingEventHandler
 import asyncio
 import json
 import os
 import time
 import logging
-from threading import Thread, RLock
+from threading import Thread
 import glob
+
+level = os.getenv('LOGLEVEL', 'info')
+
+if level == 'debug':
+    level = logging.DEBUG
+elif level == 'info':
+    level = logging.INFO
+else:
+    level = logging.ERROR
 
 logger = logging.getLogger(__name__)
 handler = logging.FileHandler('expviewer.log')
@@ -17,13 +27,13 @@ formatter = logging.Formatter(
 )
 handler.setFormatter(formatter)
 logger.addHandler(handler)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(level)
 
 WATCHERDIR = os.getenv('WATCHERDIR')
 
 clients = list()
 nuser = int()
-#client_lock = RLock()
+
 
 class IndexHandler(web.RequestHandler):
     def get(self):
@@ -38,7 +48,6 @@ class WebSocketHandler(websocket.WebSocketHandler):
 
     def open(self):
         if self not in clients:
-            # with client_lock:
             global nuser
             nuser = nuser + 1
             self.user_id = nuser
@@ -46,23 +55,38 @@ class WebSocketHandler(websocket.WebSocketHandler):
 
             logger.debug('Open request: user {}'.format(self.user_id))
 
-            images = list()
-            for img in glob.glob("{}/exp-*.tif".format(WATCHERDIR)):
-                images.append(os.path.basename(img))
+            loop = asyncio.get_event_loop()
+            asyncio.run_coroutine_threadsafe(self.get_all_images(), loop)
 
-            logger.debug('Old images {}'.format(str(images)))
+    async def get_all_images(self):
+        tasks = []
 
+        for img in glob.glob("{}/exp-*.tif".format(WATCHERDIR)):
             try:
-                self.tasks.append(self.write_message({'images': images}))
+                tasks.append(self.on_message(img)) 
             except:
                 logger.exception("Error to write message to websocket: user {}".format(self.user_id))
+
+        await asyncio.gather(*tasks)
+
 
     def on_close(self):
         if self in clients:
             logger.debug('Close request: user {}'.format(self.user_id))
-            #with client_lock:
             clients.remove(self)
             cancel_tasks(self)
+
+    @gen.coroutine
+    def on_message(self, filepath):
+        file_size = -1
+
+        while file_size != os.path.getsize(filepath):
+            file_size = os.path.getsize(filepath)
+            asyncio.sleep(1)
+
+        filename = os.path.basename(filepath)
+        logger.debug("{} image created!".format(filename))
+        yield self.write_message({'images': [filename]})
 
 
 class ImageWatcher:
@@ -79,7 +103,7 @@ class ImageWatcher:
         """
         self.__src_path = src_path
         self.__event_handler = ImageHandler()
-        self.__event_observer = PollingObserver()
+        self.__event_observer = Observer()
         self.__stop_thread = False
         self.__process = Thread(target=self.__run)
         self.__process.start()
@@ -91,7 +115,7 @@ class ImageWatcher:
             while True:  
                 if self.__stop_thread: 
                     break
-                time.sleep(1)
+                time.sleep(2)
         except Exception:
             logger.exception("Image watcher interrupted")
         finally:
@@ -131,26 +155,21 @@ class ImageHandler(RegexMatchingEventHandler):
 
     def on_created(self, event):
         asyncio.set_event_loop(asyncio.new_event_loop())
-        file_size = -1
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(self.send_msg(event))
+        loop.close()
 
-        while file_size != os.path.getsize(event.src_path):
-            file_size = os.path.getsize(event.src_path)
-            asyncio.sleep(1)
+    async def send_msg(self, event):
+        tasks = []
 
-        filename = os.path.basename(event.src_path)
-        logger.debug("{} image created!".format(filename))
-
-        #with client_lock:
         for cl in clients:
             try:
-                logger.debug("user {}: send!".format(cl.user_id))
-                task = cl.write_message({'images': [filename]})
-                cl.tasks.append(task)
+                tasks.append(cl.on_message(event.src_path)) 
             except:
-                logger.exception("Error to write message to websocket")
+                logger.exception("Error to write message to websocket: user {}".format(cl.user_id))
 
-        asyncio.get_event_loop().stop()
-
+        await asyncio.gather(*tasks)
+        
 
 def cancel_all_tasks():
     global clients
