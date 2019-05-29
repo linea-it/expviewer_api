@@ -7,7 +7,7 @@ import json
 import os
 import time
 import logging
-from threading import Thread
+from threading import Thread, RLock
 import glob
 
 logger = logging.getLogger(__name__)
@@ -23,7 +23,7 @@ WATCHERDIR = os.getenv('WATCHERDIR')
 
 clients = list()
 nuser = int()
-
+#client_lock = RLock()
 
 class IndexHandler(web.RequestHandler):
     def get(self):
@@ -38,22 +38,29 @@ class WebSocketHandler(websocket.WebSocketHandler):
 
     def open(self):
         if self not in clients:
+            # with client_lock:
             global nuser
             nuser = nuser + 1
             self.user_id = nuser
             clients.append(self)
+
             logger.debug('Open request: user {}'.format(self.user_id))
 
             images = list()
-            for img in glob.glob("{}/**/exp-*.tif".format(WATCHERDIR), recursive=True):
+            for img in glob.glob("{}/exp-*.tif".format(WATCHERDIR)):
                 images.append(os.path.basename(img))
 
             logger.debug('Old images {}'.format(str(images)))
-            self.tasks.append(self.write_message({'images': images}))
+
+            try:
+                self.tasks.append(self.write_message({'images': images}))
+            except:
+                logger.exception("Error to write message to websocket: user {}".format(self.user_id))
 
     def on_close(self):
         if self in clients:
             logger.debug('Close request: user {}'.format(self.user_id))
+            #with client_lock:
             clients.remove(self)
             cancel_tasks(self)
 
@@ -133,10 +140,14 @@ class ImageHandler(RegexMatchingEventHandler):
         filename = os.path.basename(event.src_path)
         logger.debug("{} image created!".format(filename))
 
+        #with client_lock:
         for cl in clients:
-            logger.debug("-> User {}: send!".format(cl.user_id))
-            task = cl.write_message({'images': [filename]})
-            cl.tasks.append(task)
+            try:
+                logger.debug("user {}: send!".format(cl.user_id))
+                task = cl.write_message({'images': [filename]})
+                cl.tasks.append(task)
+            except:
+                logger.exception("Error to write message to websocket")
 
         asyncio.get_event_loop().stop()
 
