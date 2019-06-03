@@ -12,6 +12,7 @@ services:
       - IMAGEDIR=/app/exposures
       - WATCHERDIR=/app/exposures/watcherdir
       - APP_PORT=5678
+      - LOGLEVEL=debug
     ports:
       - 5678:5678
     volumes:
