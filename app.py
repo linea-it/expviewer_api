@@ -1,7 +1,6 @@
 from tornado import websocket, web, ioloop, gen
-from tornado.platform.asyncio import AnyThreadEventLoopPolicy
-# from watchdog.observers.polling import PollingObserver as Observer
-from watchdog.observers import Observer as Observer
+from watchdog.observers.polling import PollingObserver
+# from watchdog.observers import Observer as Observer
 from watchdog.events import RegexMatchingEventHandler
 import asyncio
 import json
@@ -21,7 +20,7 @@ else:
     level = logging.ERROR
 
 logger = logging.getLogger(__name__)
-handler = logging.FileHandler('expviewer.log')
+handler = logging.FileHandler('expviewer.sing.log')
 formatter = logging.Formatter(
     '%(asctime)s: %(name)s ~ %(levelname)s: %(message)s'
 )
@@ -63,11 +62,13 @@ class WebSocketHandler(websocket.WebSocketHandler):
 
         for img in glob.glob("{}/exp-*.tif".format(WATCHERDIR)):
             try:
-                tasks.append(self.on_message(img)) 
+                task = self.on_message(img)
+                tasks.append(task) 
             except:
-                logger.exception("Error to write message to websocket: user {}".format(self.user_id))
+                logger.exception("Error to write message to websocket: image {}".format(img))
 
         await asyncio.gather(*tasks)
+        del tasks[:]
 
 
     def on_close(self):
@@ -78,14 +79,13 @@ class WebSocketHandler(websocket.WebSocketHandler):
 
     @gen.coroutine
     def on_message(self, filepath):
-        file_size = -1
+        #file_size = -1
 
-        while file_size != os.path.getsize(filepath):
-            file_size = os.path.getsize(filepath)
-            asyncio.sleep(1)
+        #while file_size != os.path.getsize(filepath):
+        #    file_size = os.path.getsize(filepath)
+        #    asyncio.sleep(1)
 
         filename = os.path.basename(filepath)
-        logger.debug("{} image created!".format(filename))
         yield self.write_message({'images': [filename]})
 
 
@@ -103,7 +103,7 @@ class ImageWatcher:
         """
         self.__src_path = src_path
         self.__event_handler = ImageHandler()
-        self.__event_observer = Observer()
+        self.__event_observer = PollingObserver()
         self.__stop_thread = False
         self.__process = Thread(target=self.__run)
         self.__process.start()
@@ -115,7 +115,7 @@ class ImageWatcher:
             while True:  
                 if self.__stop_thread: 
                     break
-                time.sleep(2)
+                time.sleep(1)
         except Exception:
             logger.exception("Image watcher interrupted")
         finally:
@@ -160,15 +160,18 @@ class ImageHandler(RegexMatchingEventHandler):
         loop.close()
 
     async def send_msg(self, event):
-        tasks = []
+        ltasks = []
+        logger.info("Creating image {}...".format(event.src_path))
 
         for cl in clients:
             try:
-                tasks.append(cl.on_message(event.src_path)) 
+                task = cl.on_message(event.src_path) 
+                ltasks.append(task)
             except:
-                logger.exception("Error to write message to websocket: user {}".format(cl.user_id))
+                log.exception("Error to write message to websocket: user {}".format(cl.user_id))
 
-        await asyncio.gather(*tasks)
+        await asyncio.gather(*ltasks)
+        del ltasks[:]
         
 
 def cancel_all_tasks():
