@@ -1,10 +1,11 @@
 from tornado import websocket, web, ioloop, gen
-from watchdog.observers.polling import PollingObserver
-# from watchdog.observers import Observer as Observer
+# from watchdog.observers.polling import PollingObserver
+from watchdog.observers import Observer
 from watchdog.events import RegexMatchingEventHandler
 import asyncio
 import json
 import os
+import re
 import time
 import logging
 from threading import Thread
@@ -39,6 +40,17 @@ class IndexHandler(web.RequestHandler):
         self.render("index.html")
 
 
+# class ExpviewerHandler(web.RequestHandler):
+#     def get(self, exposure_id=None):
+#         if exposure_id:
+#             exposure_id = str(exposure_id).zfill(3)
+#             images = [os.path.basename(x) for x in glob.glob("{}/tmp/{}/exp-*.tif".format(WATCHERDIR, exposure_id))]
+#         else:
+#             images = []
+
+#         return images
+
+
 class WebSocketHandler(websocket.WebSocketHandler):
     tasks = list()
 
@@ -58,17 +70,26 @@ class WebSocketHandler(websocket.WebSocketHandler):
             asyncio.run_coroutine_threadsafe(self.get_all_images(), loop)
 
     async def get_all_images(self):
-        tasks = []
+        tasks = list()
 
-        for img in glob.glob("{}/exp-*.tif".format(WATCHERDIR)):
-            try:
-                task = self.on_message(img)
-                tasks.append(task) 
-            except:
-                logger.exception("Error to write message to websocket: image {}".format(img))
+        try:
+            img_dir = sorted(
+                glob.glob("{}/tmp/*".format(WATCHERDIR)), 
+                key=lambda x: (int(re.sub('\D','',x)),x)
+            )[-1]
+        except:
+            img_dir = None
 
-        await asyncio.gather(*tasks)
-        del tasks[:]
+        if img_dir:
+            for img in glob.glob("{}/exp-*.tif".format(img_dir)):
+                try:
+                    task = self.on_message(img)
+                    tasks.append(task) 
+                except:
+                    logger.exception("Error to write message to websocket: image {}".format(img))
+
+            await asyncio.gather(*tasks)
+            del tasks[:]
 
 
     def on_close(self):
@@ -103,7 +124,8 @@ class ImageWatcher:
         """
         self.__src_path = src_path
         self.__event_handler = ImageHandler()
-        self.__event_observer = PollingObserver()
+        # self.__event_observer = PollingObserver()
+        self.__event_observer = Observer()
         self.__stop_thread = False
         self.__process = Thread(target=self.__run)
         self.__process.start()
@@ -168,7 +190,7 @@ class ImageHandler(RegexMatchingEventHandler):
                 task = cl.on_message(event.src_path) 
                 ltasks.append(task)
             except:
-                log.exception("Error to write message to websocket: user {}".format(cl.user_id))
+                logger.exception("Error to write message to websocket: user {}".format(cl.user_id))
 
         await asyncio.gather(*ltasks)
         del ltasks[:]
@@ -187,6 +209,7 @@ def cancel_tasks(cl):
 
 app = web.Application([
     (r'/testing', IndexHandler),
+    # (r'/exposure', ExpviewerHandler),
     (r'/ws', WebSocketHandler),
 ])
 
